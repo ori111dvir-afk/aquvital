@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Aquavital – Patient Simulator</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 1.5rem;
+      background: #f5f7fb;
+      color: #222;
+    }
+    h1 {
+      margin-bottom: 0.25rem;
+    }
+    .subtitle {
+      color: #555;
+      margin-bottom: 1rem;
+    }
+    .card {
+      background: #fff;
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1rem;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      align-items: center;
+    }
+    .row > * {
+      margin-right: 0.5rem;
+    }
+    label {
+      font-weight: bold;
+      margin-right: 0.5rem;
+    }
+    select, button {
+      padding: 0.4rem 0.7rem;
+      font-size: 0.95rem;
+    }
+    button {
+      border-radius: 4px;
+      border: none;
+      cursor: pointer;
+    }
+    button.primary {
+      background: #1976d2;
+      color: #fff;
+    }
+    button.danger {
+      background: #d32f2f;
+      color: #fff;
+    }
+    button.success {
+      background: #388e3c;
+      color: #fff;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+    .status-pill {
+      display: inline-block;
+      padding: 0.3rem 0.7rem;
+      border-radius: 999px;
+      font-weight: bold;
+      color: #fff;
+      font-size: 0.9rem;
+    }
+    .status-green {
+      background: #43a047;
+    }
+    .status-red {
+      background: #e53935;
+    }
+    .reading-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 0.75rem;
+      margin-top: 0.5rem;
+    }
+    .reading-item {
+      background: #f0f3ff;
+      border-radius: 6px;
+      padding: 0.5rem 0.75rem;
+    }
+    .reading-label {
+      font-size: 0.8rem;
+      color: #555;
+    }
+    .reading-value {
+      font-size: 1.1rem;
+      font-weight: bold;
+    }
+    .log {
+      font-family: Consolas, monospace;
+      font-size: 0.8rem;
+      max-height: 150px;
+      overflow-y: auto;
+      background: #111;
+      color: #eee;
+      padding: 0.5rem;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Aquavital – Patient Simulator</h1>
+  <div class="subtitle">
+    Simulated readings, risk calculation, alert creation, and resolution (demo only).
+  </div>
+
+  <div class="card">
+    <h2>Simulation Control</h2>
+    <div class="row">
+      <label for="mode">Mode:</label>
+      <select id="mode">
+        <option value="normal">Normal</option>
+        <option value="dehydration">Dehydration</option>
+      </select>
+
+      <button id="startBtn" class="primary">Start Simulation</button>
+      <button id="stopBtn">Stop Simulation</button>
+    </div>
+    <p style="margin-top:0.5rem;font-size:0.9rem;color:#555;">
+      Generates readings every 2–5 seconds in the selected mode.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Current Status</h2>
+    <div>
+      Status:
+      <span id="statusPill" class="status-pill status-green">GREEN</span>
+      <span id="riskScoreLabel" style="margin-left:1rem;font-weight:bold;">
+        Risk score: 0.00
+      </span>
+    </div>
+
+    <div class="reading-grid">
+      <div class="reading-item">
+        <div class="reading-label">Temperature (°C)</div>
+        <div id="tempValue" class="reading-value">–</div>
+      </div>
+      <div class="reading-item">
+        <div class="reading-label">Pulse (bpm)</div>
+        <div id="pulseValue" class="reading-value">–</div>
+      </div>
+      <div class="reading-item">
+        <div class="reading-label">BIS (0–100)</div>
+        <div id="bisValue" class="reading-value">–</div>
+      </div>
+    </div>
+
+    <p style="margin-top:0.5rem;font-size:0.85rem;color:#777;">
+      Risk factors (debug): pulse=<span id="pulseFactor">0</span>,
+      temp=<span id="tempFactor">0</span>,
+      bis=<span id="bisFactor">0</span>
+    </p>
+    <p style="margin-top:0.25rem;font-size:0.8rem;color:#777;">
+      Last update: <span id="lastUpdate">–</span>
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Alert Controls</h2>
+    <div class="row">
+      <button id="createAlertBtn" class="danger">Create Alert (Manual)</button>
+      <button id="resolveAlertBtn" class="success" disabled>Resolve Alert</button>
+    </div>
+    <p style="margin-top:0.5rem;font-size:0.9rem;color:#555;">
+      “Create Alert” forces an immediate dehydration alert. “Resolve Alert” appears only when an alert is active.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Debug Log</h2>
+    <div id="log" class="log"></div>
+  </div>
+
+  <!-- Firebase v8 (compat) -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  <script>
+    // ======== FIREBASE CONFIG – REPLACE WITH YOUR OWN PROJECT CREDENTIALS ========
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyC4U414ocn3f_m6ShJGntxnzaCUByjEsDo",
+  authDomain: "aquvital.firebaseapp.com",
+  databaseURL: "https://aquvital-default-rtdb.firebaseio.com",
+  projectId: "aquvital",
+  storageBucket: "aquvital.firebasestorage.app",
+  messagingSenderId: "754739020334",
+  appId: "1:754739020334:web:71d71e49062404314615bf",
+  measurementId: "G-04DR84K3ZZ"
+};
+    // ============================================================================
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    const readingsRef = db.ref("readings/latest");
+    const alertsRef = db.ref("alerts");
+    const stateRef   = db.ref("state");
+
+    // UI elements
+    const modeSelect       = document.getElementById("mode");
+    const startBtn         = document.getElementById("startBtn");
+    const stopBtn          = document.getElementById("stopBtn");
+    const createAlertBtn   = document.getElementById("createAlertBtn");
+    const resolveAlertBtn  = document.getElementById("resolveAlertBtn");
+    const statusPill       = document.getElementById("statusPill");
+    const riskScoreLabel   = document.getElementById("riskScoreLabel");
+    const tempValue        = document.getElementById("tempValue");
+    const pulseValue       = document.getElementById("pulseValue");
+    const bisValue         = document.getElementById("bisValue");
+    const pulseFactorSpan  = document.getElementById("pulseFactor");
+    const tempFactorSpan   = document.getElementById("tempFactor");
+    const bisFactorSpan    = document.getElementById("bisFactor");
+    const lastUpdateSpan   = document.getElementById("lastUpdate");
+    const logEl            = document.getElementById("log");
+
+    let simInterval = null;
+    let currentAlertId = null;
+
+    function log(msg) {
+      const ts = new Date().toLocaleTimeString();
+      logEl.textContent = `[${ts}] ${msg}\n` + logEl.textContent;
+    }
+
+    // --- Risk calculation per spec ---
+    function computeRisk(bpm, temp, bis) {
+      // Factors
+      const pulse_factor = Math.max(
+        0,
+        (bpm - 100) / 40,
+        (50 - bpm) / 20
+      );
+      const temp_factor = Math.max(
+        0,
+        (temp - 37.5) / 3,
+        (36.0 - temp) / 2
+      );
+      const bis_factor = Math.max(
+        0,
+        (70 - bis) / 40
+      );
+      const risk_score = pulse_factor + temp_factor + bis_factor;
+
+      // Final risk category
+      let risk_category = "green";
+      if (bpm < 50 || bpm > 110 ||
+          temp < 35.5 || temp > 38.5 ||
+          bis < 50) {
+        risk_category = "red";
+      }
+
+      return {
+        risk_score,
+        risk_category,
+        pulse_factor,
+        temp_factor,
+        bis_factor
+      };
+    }
+
+    // --- Simulation ---
+    function randomInRange(min, max) {
+      return min + Math.random() * (max - min);
+    }
+
+    function generateReading(mode) {
+      let temp, pulse, bis;
+      if (mode === "dehydration") {
+        // Dehydration Mode – values drift toward dangerous levels
+        bis   = randomInRange(40, 45);
+        temp  = randomInRange(38.8, 39.0);
+        pulse = randomInRange(112, 118);
+      } else {
+        // Normal Mode – safe values
+        bis   = randomInRange(70, 85);
+        temp  = randomInRange(36.5, 37.0);
+        pulse = randomInRange(65, 85);
+      }
+      return {
+        temperature: parseFloat(temp.toFixed(1)),
+        pulse: Math.round(pulse),
+        bis: Math.round(bis)
+      };
+    }
+
+    function updateUIFromReading(reading, risk) {
+      tempValue.textContent  = reading.temperature.toFixed(1);
+      pulseValue.textContent = reading.pulse.toString();
+      bisValue.textContent   = reading.bis.toString();
+
+      pulseFactorSpan.textContent = risk.pulse_factor.toFixed(2);
+      tempFactorSpan.textContent  = risk.temp_factor.toFixed(2);
+      bisFactorSpan.textContent   = risk.bis_factor.toFixed(2);
+      riskScoreLabel.textContent  = "Risk score: " + risk.risk_score.toFixed(2);
+
+      if (risk.risk_category === "red") {
+        statusPill.textContent = "RED";
+        statusPill.classList.remove("status-green");
+        statusPill.classList.add("status-red");
+      } else {
+        statusPill.textContent = "GREEN";
+        statusPill.classList.remove("status-red");
+        statusPill.classList.add("status-green");
+      }
+
+      lastUpdateSpan.textContent = new Date().toLocaleTimeString();
+    }
+
+    function publishStatus(reading, risk) {
+      const payload = {
+        temperature: reading.temperature,
+        pulse: reading.pulse,
+        bis: reading.bis,
+        risk: risk.risk_score,
+        risk_category: risk.risk_category,
+        timestamp: Date.now()
+      };
+      readingsRef.set(payload);
+    }
+
+    function maybeAutoAlert(reading, risk) {
+      if (risk.risk_category === "red" && !currentAlertId) {
+        createAlert("auto", reading, risk);
+      }
+    }
+
+    function tickSimulation() {
+      const mode = modeSelect.value;
+      const reading = generateReading(mode);
+      const risk = computeRisk(reading.pulse, reading.temperature, reading.bis);
+      updateUIFromReading(reading, risk);
+      publishStatus(reading, risk);
+      maybeAutoAlert(reading, risk);
+    }
+
+    function startSimulation() {
+      if (simInterval) return;
+      log("Simulation started.");
+      tickSimulation();
+      const delay = () => 2000 + Math.random() * 3000; // 2–5 seconds
+      simInterval = setInterval(tickSimulation, delay());
+    }
+
+    function stopSimulation() {
+      if (simInterval) {
+        clearInterval(simInterval);
+        simInterval = null;
+        log("Simulation stopped.");
+      }
+    }
+
+    // --- Alerts ---
+    function createAlert(type, reading, risk) {
+      const alertRef = alertsRef.push();
+      const alertId = alertRef.key;
+      const alertObj = {
+        alertId: alertId,
+        timestamp: Date.now(),
+        risk: risk.risk_score,
+        risk_category: risk.risk_category,
+        readings: {
+          temperature: reading.temperature,
+          pulse: reading.pulse,
+          bis: reading.bis
+        },
+        type: type,
+        resolved: false,
+        resolvedTimestamp: null
+      };
+      alertRef.set(alertObj);
+      stateRef.child("activeAlertId").set(alertId);
+      currentAlertId = alertId;
+      resolveAlertBtn.disabled = false;
+      log(`Alert created (${type}) with id=${alertId}`);
+    }
+
+    function resolveAlert() {
+      if (!currentAlertId) return;
+      const now = Date.now();
+      const alertRef = alertsRef.child(currentAlertId);
+      alertRef.update({
+        resolved: true,
+        resolvedTimestamp: now
+      });
+      stateRef.child("activeAlertId").set(null);
+      currentAlertId = null;
+      resolveAlertBtn.disabled = true;
+      // Reset risk status to normal in UI (spec requirement)
+      statusPill.textContent = "GREEN";
+      statusPill.classList.remove("status-red");
+      statusPill.classList.add("status-green");
+      log("Alert resolved and state reset to normal.");
+    }
+
+    // Listen for activeAlertId changes (in case caregiver clears or demo reset)
+    stateRef.child("activeAlertId").on("value", snap => {
+      currentAlertId = snap.val();
+      resolveAlertBtn.disabled = !currentAlertId;
+    });
+
+    // --- Event handlers ---
+    startBtn.addEventListener("click", startSimulation);
+    stopBtn.addEventListener("click", stopSimulation);
+
+    createAlertBtn.addEventListener("click", () => {
+      // Force a manual alert using latest reading if available, otherwise generate one
+      const reading = {
+        temperature: parseFloat(tempValue.textContent) || 37.0,
+        pulse: parseInt(pulseValue.textContent) || 80,
+        bis: parseInt(bisValue.textContent) || 80
+      };
+      const risk = computeRisk(reading.pulse, reading.temperature, reading.bis);
+      updateUIFromReading(reading, risk);
+      publishStatus(reading, risk);
+      createAlert("manual", reading, risk);
+    });
+
+    resolveAlertBtn.addEventListener("click", resolveAlert);
+
+    // Initial log
+    log("Patient app loaded. Configure Firebase and start simulation.");
+  </script>
+</body>
+</html>

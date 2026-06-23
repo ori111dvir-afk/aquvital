@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Aquavital – Caregiver Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 1.5rem;
+      background: #0f172a;
+      color: #e5e7eb;
+    }
+    h1 {
+      margin-bottom: 0.25rem;
+    }
+    .subtitle {
+      color: #9ca3af;
+      margin-bottom: 1rem;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 2fr) minmax(0, 1.5fr);
+      gap: 1rem;
+    }
+    @media (max-width: 900px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+    }
+    .card {
+      background: #111827;
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.5);
+    }
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .status-light {
+      width: 40px;
+      height: 40px;
+      border-radius: 999px;
+      box-shadow: 0 0 20px rgba(0,0,0,0.7);
+    }
+    .status-green {
+      background: #22c55e;
+    }
+    .status-red {
+      background: #ef4444;
+    }
+    .status-text {
+      font-size: 1.4rem;
+      font-weight: bold;
+    }
+    .reading-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 0.75rem;
+      margin-top: 1rem;
+    }
+    .reading-item {
+      background: #020617;
+      border-radius: 6px;
+      padding: 0.6rem 0.8rem;
+    }
+    .reading-label {
+      font-size: 0.8rem;
+      color: #9ca3af;
+    }
+    .reading-value {
+      font-size: 1.2rem;
+      font-weight: bold;
+    }
+    .risk-score {
+      font-size: 1.1rem;
+      margin-top: 0.5rem;
+    }
+    .timestamp {
+      font-size: 0.8rem;
+      color: #9ca3af;
+      margin-top: 0.25rem;
+    }
+    .alert-popup {
+      position: fixed;
+      top: 1rem;
+      right: 1rem;
+      background: #b91c1c;
+      color: #fee2e2;
+      padding: 0.75rem 1rem;
+      border-radius: 6px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+      z-index: 999;
+      display: none;
+      max-width: 320px;
+    }
+    .alert-popup h3 {
+      margin: 0 0 0.25rem 0;
+      font-size: 1rem;
+    }
+    .alert-popup button {
+      margin-top: 0.5rem;
+      padding: 0.3rem 0.6rem;
+      border: none;
+      border-radius: 4px;
+      background: #111827;
+      color: #e5e7eb;
+      cursor: pointer;
+      font-size: 0.8rem;
+    }
+    .feed {
+      max-height: 260px;
+      overflow-y: auto;
+      font-size: 0.85rem;
+    }
+    .feed-item {
+      border-bottom: 1px solid #1f2937;
+      padding: 0.4rem 0;
+    }
+    .feed-item:last-child {
+      border-bottom: none;
+    }
+    .feed-meta {
+      color: #9ca3af;
+      font-size: 0.75rem;
+    }
+    .badge {
+      display: inline-block;
+      padding: 0.1rem 0.4rem;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      font-weight: bold;
+      text-transform: uppercase;
+    }
+    .badge-auto {
+      background: #0ea5e9;
+      color: #e0f2fe;
+    }
+    .badge-manual {
+      background: #f97316;
+      color: #fff7ed;
+    }
+    .badge-resolved {
+      background: #22c55e;
+      color: #dcfce7;
+    }
+    .badge-active {
+      background: #ef4444;
+      color: #fee2e2;
+    }
+    .history {
+      max-height: 260px;
+      overflow-y: auto;
+      font-size: 0.8rem;
+    }
+    .history-item {
+      border-bottom: 1px solid #1f2937;
+      padding: 0.4rem 0;
+    }
+    .history-item:last-child {
+      border-bottom: none;
+    }
+    .log {
+      font-family: Consolas, monospace;
+      font-size: 0.75rem;
+      max-height: 150px;
+      overflow-y: auto;
+      background: #020617;
+      color: #e5e7eb;
+      padding: 0.5rem;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Aquavital – Caregiver Dashboard</h1>
+  <div class="subtitle">
+    Realtime alerts, patient status, and alert history (demo only).
+  </div>
+
+  <div id="alertPopup" class="alert-popup">
+    <h3>Dehydration Alert</h3>
+    <div id="alertPopupText"></div>
+    <button id="alertPopupClose">Dismiss</button>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>Patient Status</h2>
+      <div class="status-indicator">
+        <div id="statusLight" class="status-light status-green"></div>
+        <div>
+          <div id="statusText" class="status-text">Normal</div>
+          <div class="timestamp">
+            Last update: <span id="lastUpdate">–</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="reading-grid">
+        <div class="reading-item">
+          <div class="reading-label">Temperature (°C)</div>
+          <div id="tempValue" class="reading-value">–</div>
+        </div>
+        <div class="reading-item">
+          <div class="reading-label">Pulse (bpm)</div>
+          <div id="pulseValue" class="reading-value">–</div>
+        </div>
+        <div class="reading-item">
+          <div class="reading-label">BIS (0–100)</div>
+          <div id="bisValue" class="reading-value">–</div>
+        </div>
+      </div>
+
+      <div class="risk-score">
+        Risk score: <span id="riskScore">0.00</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Alert Feed</h2>
+      <div id="alertFeed" class="feed"></div>
+    </div>
+  </div>
+
+  <div class="layout" style="margin-top:1rem;">
+    <div class="card">
+      <h2>Alert History</h2>
+      <div id="alertHistory" class="history"></div>
+    </div>
+    <div class="card">
+      <h2>Debug Log</h2>
+      <div id="log" class="log"></div>
+    </div>
+  </div>
+
+  <!-- Firebase v8 (compat) -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  <script>
+    // ======== FIREBASE CONFIG – REPLACE WITH YOUR OWN PROJECT CREDENTIALS ========
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyC4U414ocn3f_m6ShJGntxnzaCUByjEsDo",
+  authDomain: "aquvital.firebaseapp.com",
+  databaseURL: "https://aquvital-default-rtdb.firebaseio.com",
+  projectId: "aquvital",
+  storageBucket: "aquvital.firebasestorage.app",
+  messagingSenderId: "754739020334",
+  appId: "1:754739020334:web:71d71e49062404314615bf",
+  measurementId: "G-04DR84K3ZZ"
+};
+    // ============================================================================
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    const readingsRef = db.ref("readings/latest");
+    const alertsRef   = db.ref("alerts");
+    const stateRef    = db.ref("state");
+
+    // UI elements
+    const statusLight   = document.getElementById("statusLight");
+    const statusText    = document.getElementById("statusText");
+    const lastUpdate    = document.getElementById("lastUpdate");
+    const tempValue     = document.getElementById("tempValue");
+    const pulseValue    = document.getElementById("pulseValue");
+    const bisValue      = document.getElementById("bisValue");
+    const riskScoreSpan = document.getElementById("riskScore");
+    const alertFeed     = document.getElementById("alertFeed");
+    const alertHistory  = document.getElementById("alertHistory");
+    const logEl         = document.getElementById("log");
+
+    const alertPopup       = document.getElementById("alertPopup");
+    const alertPopupText   = document.getElementById("alertPopupText");
+    const alertPopupClose  = document.getElementById("alertPopupClose");
+
+    let alertsCache = {}; // alertId -> alert object
+
+    function log(msg) {
+      const ts = new Date().toLocaleTimeString();
+      logEl.textContent = `[${ts}] ${msg}\n` + logEl.textContent;
+    }
+
+    function setStatusFromCategory(category) {
+      if (category === "red") {
+        statusLight.classList.remove("status-green");
+        statusLight.classList.add("status-red");
+        statusText.textContent = "High Risk – Dehydration Suspected";
+      } else {
+        statusLight.classList.remove("status-red");
+        statusLight.classList.add("status-green");
+        statusText.textContent = "Normal";
+      }
+    }
+
+    // --- Realtime readings listener ---
+    readingsRef.on("value", snap => {
+      const data = snap.val();
+      if (!data) return;
+      tempValue.textContent  = data.temperature?.toFixed(1) ?? "–";
+      pulseValue.textContent = data.pulse ?? "–";
+      bisValue.textContent   = data.bis ?? "–";
+      riskScoreSpan.textContent = (data.risk ?? 0).toFixed(2);
+      lastUpdate.textContent = data.timestamp
+        ? new Date(data.timestamp).toLocaleTimeString()
+        : "–";
+      setStatusFromCategory(data.risk_category || "green");
+      log("Readings updated from realtime database.");
+    });
+
+    // --- Alert popup ---
+    function showAlertPopup(alert) {
+      const ts = new Date(alert.timestamp).toLocaleTimeString();
+      alertPopupText.textContent =
+        `Type: ${alert.type.toUpperCase()} | Risk: ${alert.risk.toFixed(2)} | ` +
+        `T=${alert.readings.temperature}°C, P=${alert.readings.pulse} bpm, BIS=${alert.readings.bis} (at ${ts})`;
+      alertPopup.style.display = "block";
+      setTimeout(() => {
+        alertPopup.style.display = "none";
+      }, 6000);
+    }
+
+    alertPopupClose.addEventListener("click", () => {
+      alertPopup.style.display = "none";
+    });
+
+    // --- Alert feed + history rendering ---
+    function renderAlertFeed() {
+      const alerts = Object.values(alertsCache)
+        .sort((a, b) => b.timestamp - a.timestamp)
+        .slice(0, 20); // SMS-style recent feed
+
+      alertFeed.innerHTML = "";
+      alerts.forEach(alert => {
+        const div = document.createElement("div");
+        div.className = "feed-item";
+
+        const ts = new Date(alert.timestamp).toLocaleTimeString();
+        const typeBadgeClass = alert.type === "manual" ? "badge-manual" : "badge-auto";
+        const typeLabel = alert.type === "manual" ? "Manual" : "Auto";
+
+        const statusBadgeClass = alert.resolved ? "badge-resolved" : "badge-active";
+        const statusLabel = alert.resolved ? "Resolved" : "Active";
+
+        div.innerHTML = `
+          <div>
+            <span class="badge ${typeBadgeClass}">${typeLabel}</span>
+            <span class="badge ${statusBadgeClass}">${statusLabel}</span>
+          </div>
+          <div>
+            Risk ${alert.risk.toFixed(2)} – T=${alert.readings.temperature}°C,
+            P=${alert.readings.pulse} bpm, BIS=${alert.readings.bis}
+          </div>
+          <div class="feed-meta">${ts}</div>
+        `;
+        alertFeed.appendChild(div);
+      });
+    }
+
+    function renderAlertHistory() {
+      const alerts = Object.values(alertsCache)
+        .sort((a, b) => b.timestamp - a.timestamp);
+
+      alertHistory.innerHTML = "";
+      alerts.forEach(alert => {
+        const div = document.createElement("div");
+        div.className = "history-item";
+        const ts = new Date(alert.timestamp).toLocaleString();
+        const resolvedTs = alert.resolvedTimestamp
+          ? new Date(alert.resolvedTimestamp).toLocaleString()
+          : "–";
+        div.innerHTML = `
+          <div>
+            <strong>${ts}</strong> – Risk ${alert.risk.toFixed(2)} (${alert.type})
+          </div>
+          <div>
+            T=${alert.readings.temperature}°C, P=${alert.readings.pulse} bpm, BIS=${alert.readings.bis}
+          </div>
+          <div>
+            Resolved: ${alert.resolved ? "Yes" : "No"} (at ${resolvedTs})
+          </div>
+        `;
+        alertHistory.appendChild(div);
+      });
+    }
+
+    // --- Realtime alerts listener ---
+    alertsRef.on("child_added", snap => {
+      const alert = snap.val();
+      alertsCache[alert.alertId] = alert;
+      renderAlertFeed();
+      renderAlertHistory();
+
+      if (!alert.resolved) {
+        showAlertPopup(alert);
+        log(`New alert received (${alert.type}) id=${alert.alertId}`);
+      }
+    });
+
+    alertsRef.on("child_changed", snap => {
+      const alert = snap.val();
+      alertsCache[alert.alertId] = alert;
+      renderAlertFeed();
+      renderAlertHistory();
+
+      if (alert.resolved) {
+        // Notification on resolution
+        log(`Alert resolved id=${alert.alertId}`);
+        const popupText =
+          `Alert resolved: patient received water. (Risk ${alert.risk.toFixed(2)})`;
+        alertPopupText.textContent = popupText;
+        alertPopup.style.display = "block";
+        setTimeout(() => {
+          alertPopup.style.display = "none";
+        }, 5000);
+      }
+    });
+
+    // Optional: watch activeAlertId for demo clarity
+    stateRef.child("activeAlertId").on("value", snap => {
+      const activeId = snap.val();
+      if (!activeId) {
+        log("No active alert.");
+      } else {
+        log("Active alert id=" + activeId);
+      }
+    });
+
+    log("Caregiver app loaded. Waiting for readings and alerts...");
+  </script>
+</body>
+</html>
