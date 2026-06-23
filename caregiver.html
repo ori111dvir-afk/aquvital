@@ -291,7 +291,7 @@ const firebaseConfig = {
       if (category === "red") {
         statusLight.classList.remove("status-green");
         statusLight.classList.add("status-red");
-        statusText.textContent = "High Risk – Dehydration Suspected";
+        statusText.textContent = "Risk";
       } else {
         statusLight.classList.remove("status-red");
         statusLight.classList.add("status-green");
@@ -318,12 +318,13 @@ const firebaseConfig = {
     function showAlertPopup(alert) {
       const ts = new Date(alert.timestamp).toLocaleTimeString();
       alertPopupText.textContent =
-        `Type: ${alert.type.toUpperCase()} | Risk: ${alert.risk.toFixed(2)} | ` +
-        `T=${alert.readings.temperature}°C, P=${alert.readings.pulse} bpm, BIS=${alert.readings.bis} (at ${ts})`;
+        `${alert.message || (alert.type === "manual" ? "Manual alert" : "Automatic alert")} ` +
+        `| Risk ${alert.risk.toFixed(2)} | T=${alert.readings.temperature}°C, ` +
+        `P=${alert.readings.pulse} bpm, BIS=${alert.readings.bis} (at ${ts})`;
       alertPopup.style.display = "block";
       setTimeout(() => {
         alertPopup.style.display = "none";
-      }, 6000);
+      }, 5000);
     }
 
     alertPopupClose.addEventListener("click", () => {
