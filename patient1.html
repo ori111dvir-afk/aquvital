@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aquavital - Patient Emulator</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; padding: 20px; font-family: sans-serif; }
+        .status-line { font-size: 1.2rem; font-weight: bold; margin-bottom: 15px; }
+        .status-green { color: #198754; } /* Functional Green */
+        .status-red { color: #dc3545; }   /* Prominent Red */
+        .metric-card { border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        #force-btn { padding: 20px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container text-center">
+        <h2 class="mb-4">Aquavital - Patient Emulator</h2>
+        
+        <div class="card metric-card mb-4">
+            <div class="card-body">
+                <!-- UI Color Rule: Text color changes, not the container [8] -->
+                <div id="status-line" class="status-line status-green">Live Status: Normal Mode</div>
+                <hr>
+                <div class="text-start">
+                    <p><strong>Pulse:</strong> <span id="val-pulse">--</span> bpm</p>
+                    <p><strong>Oxygen (SpO2):</strong> <span id="val-oxygen">--</span>%</p>
+                    <p><strong>BIS Resistance:</strong> <span id="val-bis">--</span> Ω</p>
+                    <p class="mt-3"><small class="text-muted">Last Sync: <span id="val-time">--</span></small></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Button text toggles, but color remains static [8, 9] -->
+        <button id="force-btn" class="btn btn-primary w-100">FORCE DEHYDRATION ALERT</button>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyC4U414ocn3f_m6ShJGntxnzaCUByjEsDo",
+            authDomain: "aquvital.firebaseapp.com",
+            databaseURL: "https://aquvital-default-rtdb.firebaseio.com",
+            projectId: "aquvital",
+            storageBucket: "aquvital.firebasestorage.app",
+            messagingSenderId: "754739020334",
+            appId: "1:754739020334:web:71d71e49062404314615bf",
+            measurementId: "G-04DR84K3ZZ"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let isAlertMode = false;
+        const statusLine = document.getElementById('status-line');
+        const forceBtn = document.getElementById('force-btn');
+
+        forceBtn.addEventListener('click', () => {
+            isAlertMode = !isAlertMode;
+            if (isAlertMode) {
+                forceBtn.innerText = "RESET TO NORMAL";
+                statusLine.innerText = "Live Status: Forced Alert Mode";
+                statusLine.className = "status-line status-red";
+            } else {
+                forceBtn.innerText = "FORCE DEHYDRATION ALERT";
+                statusLine.innerText = "Live Status: Normal Mode";
+                statusLine.className = "status-line status-green";
+            }
+        });
+
+        // 2-second background loop [9, 10]
+        setInterval(() => {
+            let payload = {};
+            const now = Date.now(); // Unix Epoch for mathematical comparison [10]
+
+            if (!isAlertMode) {
+                // NORMAL RANGE: Within boundaries [2, 3]
+                payload = {
+                    pulse: Math.floor(Math.random() * (100 - 60 + 1)) + 60,   // 60-100 bpm
+                    oxygen: Math.floor(Math.random() * (100 - 97 + 1)) + 97,  // 97-100%
+                    bis: Math.floor(Math.random() * (550 - 450 + 1)) + 450,   // 450-550 Ω
+                    alertActive: false,
+                    timestamp: now
+                };
+            } else {
+                // FORCED ALERT MODE: Random "Danger Zone" clinical values [1]
+                payload = {
+                    pulse: Math.floor(Math.random() * (185 - 161 + 1)) + 161,  // 161-185 bpm (High)
+                    oxygen: Math.floor(Math.random() * (94 - 88 + 1)) + 88,    // 88-94% (Low)
+                    bis: Math.floor(Math.random() * (750 - 610 + 1)) + 610,    // 610-750 Ω (High Resistance)
+                    alertActive: true,
+                    timestamp: now
+                };
+            }
+
+            // Local UI Update
+            document.getElementById('val-pulse').innerText = payload.pulse;
+            document.getElementById('val-oxygen').innerText = payload.oxygen;
+            document.getElementById('val-bis').innerText = payload.bis;
+            document.getElementById('val-time').innerText = new Date(payload.timestamp).toLocaleTimeString();
+
+            // Firebase Sync [10]
+            db.ref('aquavital/patient_01/').set(payload);
+        }, 2000);
+    </script>
+</body>
+</html>

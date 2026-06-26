@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aquavital - Caregiver Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #e9ecef; padding: 40px; }
+        .telemetry-card { font-size: 2.5rem; font-weight: bold; transition: background-color 0.5s ease; }
+        #alertModal { background: rgba(0,0,0,0.85); }
+        .modal-content { border: 5px solid #dc3545; }
+        /* Style for the persistent red alert state */
+        .bg-critical { background-color: #ffcccc !important; border: 3px solid #dc3545; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center mb-5">Aquavital - Caregiver Dashboard</h1>
+        
+        <div class="row justify-content-center">
+            <div class="col-md-10">
+                <!-- ID added to card for dynamic color changes -->
+                <div id="readings-card" class="card shadow">
+                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                        <h4 class="mb-0">View Patient Readings</h4>
+                        <span id="conn-badge" class="badge bg-secondary">INITIALIZING...</span>
+                    </div>
+                    <div class="card-body telemetry-card py-5">
+                        <div class="row text-center">
+                            <div class="col-4">
+                                <div class="text-muted small text-uppercase">Pulse</div>
+                                <div id="disp-pulse">--</div>
+                            </div>
+                            <div class="col-4 border-start border-end">
+                                <div class="text-muted small text-uppercase">Oxygen (SpO2)</div>
+                                <div id="disp-oxygen">--</div>
+                            </div>
+                            <div class="col-4">
+                                <div class="text-muted small text-uppercase">BIS Resistance</div>
+                                <div id="disp-bis">--</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-footer text-center text-muted">
+                        Last Synchronized: <span id="disp-time">--</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Alert Interface -->
+    <div class="modal fade show" id="alertModal" tabindex="-1" style="display: none;" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-body text-center p-5">
+                    <h1 class="display-1">⚠️</h1>
+                    <h2 class="text-danger fw-bold">WARNING:</h2>
+                    <p class="lead">Potential Dehydration Risk Detected!</p>
+                    <button type="button" class="btn btn-danger btn-lg mt-4 px-5" id="dismiss-btn">Dismiss Alert</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyC4U414ocn3f_m6ShJGntxnzaCUByjEsDo",
+            authDomain: "aquvital.firebaseapp.com",
+            databaseURL: "https://aquvital-default-rtdb.firebaseio.com",
+            projectId: "aquvital",
+            storageBucket: "aquvital.firebasestorage.app",
+            messagingSenderId: "754739020334",
+            appId: "1:754739020334:web:71d71e49062404314615bf",
+            measurementId: "G-04DR84K3ZZ"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        const modal = document.getElementById('alertModal');
+        const connBadge = document.getElementById('conn-badge');
+        const readingsCard = document.getElementById('readings-card');
+        let alertDismissed = false;
+        let lastKnownTimestamp = 0;
+
+        // Heartbeat Monitor & Offline Reset
+        setInterval(() => {
+            if (lastKnownTimestamp === 0) return;
+            const age = Date.now() - lastKnownTimestamp;
+            
+            if (age > 10000) { 
+                connBadge.innerText = "OFFLINE";
+                connBadge.className = "badge bg-danger";
+                document.getElementById('disp-pulse').innerText = "N/A";
+                document.getElementById('disp-oxygen').innerText = "N/A";
+                document.getElementById('disp-bis').innerText = "N/A";
+                readingsCard.classList.remove('bg-critical'); // Reset color if offline
+                modal.style.display = 'none'; 
+            } else {
+                connBadge.innerText = "ONLINE";
+                connBadge.className = "badge bg-success";
+            }
+        }, 1000);
+
+        db.ref('aquavital/patient_01/').on('value', (snapshot) => {
+            const data = snapshot.val();
+            if (!data) return;
+
+            lastKnownTimestamp = data.timestamp;
+            const isFresh = (Date.now() - data.timestamp) < 10000;
+
+            if (isFresh) {
+                document.getElementById('disp-pulse').innerHTML = `${data.pulse} <small class="fs-6">bpm</small>`;
+                document.getElementById('disp-oxygen').innerHTML = `${data.oxygen} <small class="fs-6">%</small>`;
+                document.getElementById('disp-bis').innerHTML = `${data.bis} <small class="fs-6">Ω</small>`;
+                document.getElementById('disp-time').innerText = new Date(data.timestamp).toLocaleTimeString();
+
+                // Evaluate Thresholds [3, 4]
+                const pulseAlert = data.pulse < 50 || data.pulse > 160;
+                const oxygenAlert = data.oxygen < 95;
+                const bisAlert = data.bis > 600;
+                const isCritical = (data.alertActive === true || pulseAlert || oxygenAlert || bisAlert);
+
+                if (isCritical) {
+                    // NEW: Card stays red as long as readings are high
+                    readingsCard.classList.add('bg-critical');
+                    
+                    // Modal only shows if not already dismissed for this event
+                    if (!alertDismissed) {
+                        modal.style.display = 'block';
+                    }
+                } else {
+                    // Reset everything when metrics return to normal
+                    readingsCard.classList.remove('bg-critical');
+                    modal.style.display = 'none';
+                    alertDismissed = false; 
+                }
+            }
+        });
+
+        document.getElementById('dismiss-btn').addEventListener('click', () => {
+            modal.style.display = 'none';
+            alertDismissed = true; // Modal goes away, but card stays red via logic above
+        });
+    </script>
+</body>
+</html>
